@@ -1,0 +1,2 @@
+This projects aims to have a tool to easily remove history both on a global and per directory level.
+This is specifically targeting the zsh plugin "per-directory-history": https://github.com/jimhester/per-directory-history
