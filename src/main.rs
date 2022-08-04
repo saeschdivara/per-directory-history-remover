@@ -1,13 +1,40 @@
+use std::env;
 use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
 use std::time::Instant;
-use std::env;
 
 use dirs;
+use encoding::{DecoderTrap, Encoding};
+use encoding::all::UTF_8;
+
+fn get_file_as_byte_vec(filename: &PathBuf) -> std::io::Result<Vec<u8>> {
+    let mut f = match fs::File::open(&filename) {
+        Err(e) => {
+            println!("Error during file open: {}", e);
+            return Err(e);
+        }
+        Ok(result) => result
+    };
+    let metadata = fs::metadata(&filename).expect("unable to read metadata");
+    let mut buffer = vec![0; metadata.len() as usize];
+    f.read(&mut buffer).expect("buffer overflow");
+
+    Ok(buffer)
+}
 
 fn remove_lines_by_search_term(file_path: PathBuf, search_term: &str) {
-    let content = match fs::read_to_string(&file_path) {
-        Err(e) => panic!("Could not read file: {}", e),
+
+    // this is pure to support .zsh_history since it contains data which is giving issues to rust
+    let data = match get_file_as_byte_vec(&file_path) {
+        Err(_) => return,
+        Ok(result) => result
+    };
+    let content = match UTF_8.decode(data.as_slice(), DecoderTrap::Ignore) {
+        Err(e) => {
+            println!("Could not decode file content as utf-8 string: {}", e);
+            return;
+        }
         Ok(result) => result
     };
 
@@ -26,7 +53,10 @@ fn recursive_history_update(current_directory: PathBuf, search_term: &str) {
     println!("{:?}", current_directory);
 
     let directory_list = match fs::read_dir(current_directory) {
-        Err(e) => panic!("Could not read directory: {}", e),
+        Err(e) => {
+            println!("Could not read directory: {}", e);
+            return;
+        }
         Ok(r) => r
     };
 
@@ -60,6 +90,10 @@ fn main() {
 
     let search_term = args[1].as_str();
     recursive_history_update(home_dir.join(".directory_history"), search_term);
+
+    // replace search term in global history (bash and zsh)
+    remove_lines_by_search_term(home_dir.join(".bash_history"), search_term);
+    remove_lines_by_search_term(home_dir.join(".zsh_history"), search_term);
 
     let elapsed = now.elapsed();
     println!("Execution took: {:.2?}", elapsed);
